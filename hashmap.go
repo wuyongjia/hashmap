@@ -12,6 +12,7 @@ import (
 type IsValidAndUpdataFunc func(value interface{}) bool
 type ReadFunc func(key interface{}, value interface{})
 type UpdateFunc func(value interface{})
+type EqualFunc func(v1, v2 interface{}) bool
 
 type HM struct {
 	slices      []*Pairs
@@ -76,7 +77,7 @@ func (hm *HM) Expand(capacity int) *HM {
 func (hm *HM) Get(key interface{}) interface{} {
 	hm.lock.RLock()
 	defer hm.lock.RUnlock()
-	var pairs = hm.getPairsUnsafe(key)
+	var pairs, _ = hm.getPairsUnsafe(key)
 	if pairs != nil {
 		return pairs.value
 	}
@@ -84,18 +85,36 @@ func (hm *HM) Get(key interface{}) interface{} {
 }
 
 func (hm *HM) Put(key interface{}, value interface{}) {
-	var pairs = hm.getPairs(key)
+	var pairs, hashIndex = hm.getPairs(key)
 	if pairs == nil {
-		hm.addPairs(key, value)
+		var newPairs = &Pairs{
+			key:   key,
+			value: value,
+			last:  nil,
+			next:  nil,
+		}
+		hm.lock.Lock()
+		defer hm.lock.Unlock()
+		pairs = hm.slices[hashIndex]
+		if pairs != nil {
+			pairs.last.next = newPairs
+			pairs.last = newPairs
+		} else {
+			newPairs.last = newPairs
+			hm.slices[hashIndex] = newPairs
+		}
+		hm.count++
 	} else {
-		hm.setValue(pairs, value)
+		hm.lock.Lock()
+		defer hm.lock.Unlock()
+		pairs.value = value
 	}
 }
 
 func (hm *HM) UpdateWithFunc(key interface{}, updateFunc UpdateFunc) {
 	hm.lock.Lock()
 	defer hm.lock.Unlock()
-	var pairs = hm.getPairsUnsafe(key)
+	var pairs, _ = hm.getPairsUnsafe(key)
 	if pairs != nil {
 		updateFunc(pairs.value)
 	} else {
@@ -154,51 +173,26 @@ func (hm *HM) IterateAndUpdate(isValidAndUpdateFunc IsValidAndUpdataFunc) {
 	}
 }
 
-func (hm *HM) getPairs(key interface{}) *Pairs {
+func (hm *HM) getPairs(key interface{}) (*Pairs, int) {
 	hm.lock.RLock()
 	defer hm.lock.RUnlock()
 	return hm.getPairsUnsafe(key)
 }
 
-func (hm *HM) getPairsUnsafe(key interface{}) *Pairs {
-	var pairs = hm.slices[hm.GetHashIndex(key)]
+func (hm *HM) getPairsUnsafe(key interface{}) (*Pairs, int) {
+	var equal = getEqualFunc(key)
+	var hashIndex = hm.GetHashIndex(key)
+	var pairs = hm.slices[hashIndex]
 	for {
 		if pairs == nil {
 			break
 		}
 		if equal(pairs.key, key) {
-			return pairs
+			return pairs, hashIndex
 		}
 		pairs = pairs.next
 	}
-	return nil
-}
-
-func (hm *HM) addPairs(key interface{}, value interface{}) {
-	var hashIndex = hm.GetHashIndex(key)
-	var newPairs = &Pairs{
-		key:   key,
-		value: value,
-		last:  nil,
-		next:  nil,
-	}
-	hm.lock.Lock()
-	defer hm.lock.Unlock()
-	var pairs = hm.slices[hashIndex]
-	if pairs != nil {
-		pairs.last.next = newPairs
-		pairs.last = newPairs
-	} else {
-		newPairs.last = newPairs
-		hm.slices[hashIndex] = newPairs
-	}
-	hm.count++
-}
-
-func (hm *HM) setValue(pairs *Pairs, value interface{}) {
-	hm.lock.Lock()
-	defer hm.lock.Unlock()
-	pairs.value = value
+	return nil, hashIndex
 }
 
 func (hm *HM) setPairsEmpty(pairs *Pairs) {
@@ -214,6 +208,7 @@ func (hm *HM) setPairsEmpty(pairs *Pairs) {
 }
 
 func (hm *HM) removePairs(key interface{}, updateFunc UpdateFunc) {
+	var equal = getEqualFunc(key)
 	var hashIndex = hm.GetHashIndex(key)
 	var prevPairs *Pairs = nil
 	var pairs = hm.slices[hashIndex]
@@ -269,14 +264,26 @@ func (hm *HM) GetCount() int {
 	return hm.count
 }
 
-func equal(v1, v2 interface{}) bool {
-	switch v1.(type) {
+func getEqualFunc(v interface{}) EqualFunc {
+	switch v.(type) {
 	case []uint8:
-		return bytes.Equal(v1.([]byte), v2.([]byte))
+		return bytesEqual
 	case string:
-		return v1.(string) == v2.(string)
+		return stringEqual
 	case int:
-		return v1.(int) == v2.(int)
+		return intEqual
 	}
-	return false
+	return nil
+}
+
+func bytesEqual(v1, v2 interface{}) bool {
+	return bytes.Equal(v1.([]byte), v2.([]byte))
+}
+
+func stringEqual(v1, v2 interface{}) bool {
+	return v1.(string) == v2.(string)
+}
+
+func intEqual(v1, v2 interface{}) bool {
+	return v1.(int) == v2.(int)
 }
