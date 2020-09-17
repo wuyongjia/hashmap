@@ -7,9 +7,9 @@
 package main
 
 import (
-	"fmt"
+    "fmt"
     "time"
-    
+
     "github.com/wuyongjia/hashmap"
 )
 
