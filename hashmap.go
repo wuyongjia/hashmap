@@ -257,23 +257,6 @@ func (hm *HM) GetCount() int {
 	return hm.count
 }
 
-func (hm *HM) GetHashIndex(key interface{}) int {
-	switch key.(type) {
-	case []uint8:
-		var hash = fnv.New32()
-		hash.Write(key.([]byte))
-		return int(hash.Sum32() & hm.mask_uint32)
-	case string:
-		var hash = fnv.New32()
-		hash.Write([]byte(key.(string)))
-		return int(hash.Sum32() & hm.mask_uint32)
-	case int:
-		return key.(int) & hm.mask_int
-	default:
-		panic(errors.New("bad key type"))
-	}
-}
-
 func (hm *HM) getHashIndexAndEqualFunc(key interface{}) (int, EqualFunc) {
 	switch key.(type) {
 	case []uint8:
