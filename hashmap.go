@@ -18,6 +18,7 @@ type HM struct {
 	slices      []*Pairs
 	capacity    int
 	mask_uint32 uint32
+	mask_uint64 uint64
 	mask_int    int
 	count       int
 	lock        *sync.RWMutex
@@ -41,8 +42,9 @@ func New(capacity int) *HM {
 		slices:      make([]*Pairs, capacity),
 		capacity:    capacity,
 		count:       0,
-		mask_uint32: uint32(capacity - 1),
 		mask_int:    capacity - 1,
+		mask_uint32: uint32(capacity - 1),
+		mask_uint64: uint64(capacity - 1),
 		lock:        &sync.RWMutex{},
 	}
 	return hm
@@ -284,6 +286,10 @@ func (hm *HM) getHashIndexAndEqualFunc(key interface{}) (int, EqualFunc) {
 		return int(hash.Sum32() & hm.mask_uint32), stringEqual
 	case int:
 		return key.(int) & hm.mask_int, intEqual
+	case uint64:
+		return int(key.(uint64) & hm.mask_uint64), uint64Equal
+	case uint32:
+		return int(key.(uint32) & hm.mask_uint32), uint32Equal
 	default:
 		panic(errors.New("bad key type"))
 	}
@@ -299,4 +305,12 @@ func stringEqual(v1, v2 interface{}) bool {
 
 func intEqual(v1, v2 interface{}) bool {
 	return v1.(int) == v2.(int)
+}
+
+func uint32Equal(v1, v2 interface{}) bool {
+	return v1.(uint32) == v2.(uint32)
+}
+
+func uint64Equal(v1, v2 interface{}) bool {
+	return v1.(uint64) == v2.(uint64)
 }
