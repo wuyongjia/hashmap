@@ -122,6 +122,16 @@ func (hm *HM) UpdateWithFunc(key interface{}, updateFunc UpdateFunc) {
 	}
 }
 
+func (hm *HM) Exists(key interface{}) bool {
+	hm.lock.RLock()
+	defer hm.lock.RUnlock()
+	var pairs, _ = hm.getPairsUnsafe(key)
+	if pairs != nil {
+		return true
+	}
+	return false
+}
+
 func (hm *HM) Remove(key interface{}) {
 	hm.lock.Lock()
 	defer hm.lock.Unlock()
@@ -180,8 +190,7 @@ func (hm *HM) getPairs(key interface{}) (*Pairs, int) {
 }
 
 func (hm *HM) getPairsUnsafe(key interface{}) (*Pairs, int) {
-	var equal = getEqualFunc(key)
-	var hashIndex = hm.GetHashIndex(key)
+	var hashIndex, equal = hm.getHashIndexAndEqualFunc(key)
 	var pairs = hm.slices[hashIndex]
 	for {
 		if pairs == nil {
@@ -208,8 +217,7 @@ func (hm *HM) setPairsEmpty(pairs *Pairs) {
 }
 
 func (hm *HM) removePairs(key interface{}, updateFunc UpdateFunc) {
-	var equal = getEqualFunc(key)
-	var hashIndex = hm.GetHashIndex(key)
+	var hashIndex, equal = hm.getHashIndexAndEqualFunc(key)
 	var prevPairs *Pairs = nil
 	var pairs = hm.slices[hashIndex]
 	var firstPairs = pairs
@@ -241,6 +249,12 @@ func (hm *HM) removePairs(key interface{}, updateFunc UpdateFunc) {
 	}
 }
 
+func (hm *HM) GetCount() int {
+	hm.lock.RLock()
+	defer hm.lock.RUnlock()
+	return hm.count
+}
+
 func (hm *HM) GetHashIndex(key interface{}) int {
 	switch key.(type) {
 	case []uint8:
@@ -258,22 +272,21 @@ func (hm *HM) GetHashIndex(key interface{}) int {
 	}
 }
 
-func (hm *HM) GetCount() int {
-	hm.lock.RLock()
-	defer hm.lock.RUnlock()
-	return hm.count
-}
-
-func getEqualFunc(v interface{}) EqualFunc {
-	switch v.(type) {
+func (hm *HM) getHashIndexAndEqualFunc(key interface{}) (int, EqualFunc) {
+	switch key.(type) {
 	case []uint8:
-		return bytesEqual
+		var hash = fnv.New32()
+		hash.Write(key.([]byte))
+		return int(hash.Sum32() & hm.mask_uint32), bytesEqual
 	case string:
-		return stringEqual
+		var hash = fnv.New32()
+		hash.Write([]byte(key.(string)))
+		return int(hash.Sum32() & hm.mask_uint32), stringEqual
 	case int:
-		return intEqual
+		return key.(int) & hm.mask_int, intEqual
+	default:
+		panic(errors.New("bad key type"))
 	}
-	return nil
 }
 
 func bytesEqual(v1, v2 interface{}) bool {
