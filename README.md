@@ -31,7 +31,6 @@ func main() {
 	hm1.Put(101, 100001)
 	hm1.Put(102, 3.14)
 	hm1.Put(123, float32(3.1415))
-	hm1.Put(uint64(201), 2019999)
 	hm1.Put(333, &Item{
 		value: 123,
 		str:   "abcdefghijk",
@@ -41,7 +40,6 @@ func main() {
 	fmt.Println(hm1.Get(101).(int))
 	fmt.Println(hm1.Get(102).(float64))
 	fmt.Println(hm1.Get(123).(float32))
-	fmt.Println(hm1.Get(uint64(201)).(int))
 
 	var item = hm1.Get(333).(*Item)
 	fmt.Println("value:", item.value, ", str:", item.str)
