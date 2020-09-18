@@ -1,4 +1,4 @@
-# Golang hashmap
+# Golang hashmap, which is thread-safe
 
 ## Example
 
