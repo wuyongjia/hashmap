@@ -9,7 +9,7 @@ import (
 	"hash/fnv"
 )
 
-type IsValidAndUpdataFunc func(value interface{}) bool
+type IsValidAndUpdataFunc func(key interface{}, value interface{}) bool
 type ReadFunc func(key interface{}, value interface{})
 type UpdateFunc func(value interface{})
 type EqualFunc func(v1, v2 interface{}) bool
@@ -124,6 +124,22 @@ func (hm *HM) UpdateWithFunc(key interface{}, updateFunc UpdateFunc) {
 	}
 }
 
+func (hm *HM) Remove(key interface{}) {
+	hm.lock.Lock()
+	defer hm.lock.Unlock()
+	hm.removePairs(key, nil)
+}
+
+func (hm *HM) RemoveUnsafe(key interface{}) {
+	hm.removePairs(key, nil)
+}
+
+func (hm *HM) RemoveAndUpdate(key interface{}, updateFunc UpdateFunc) {
+	hm.lock.Lock()
+	defer hm.lock.Unlock()
+	hm.removePairs(key, updateFunc)
+}
+
 func (hm *HM) Exists(key interface{}) bool {
 	hm.lock.RLock()
 	defer hm.lock.RUnlock()
@@ -132,18 +148,6 @@ func (hm *HM) Exists(key interface{}) bool {
 		return true
 	}
 	return false
-}
-
-func (hm *HM) Remove(key interface{}) {
-	hm.lock.Lock()
-	defer hm.lock.Unlock()
-	hm.removePairs(key, nil)
-}
-
-func (hm *HM) RemoveAndUpdate(key interface{}, updateFunc UpdateFunc) {
-	hm.lock.Lock()
-	defer hm.lock.Unlock()
-	hm.removePairs(key, updateFunc)
 }
 
 func (hm *HM) Iterate(readFunc ReadFunc) {
@@ -174,7 +178,7 @@ func (hm *HM) IterateAndUpdate(isValidAndUpdateFunc IsValidAndUpdataFunc) {
 		}
 		for {
 			nextPairs = pairs.next
-			if isValidAndUpdateFunc(pairs.value) == false {
+			if isValidAndUpdateFunc(pairs.key, pairs.value) == false {
 				hm.removePairs(pairs.key, nil)
 			}
 			if nextPairs == nil {
