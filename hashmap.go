@@ -17,9 +17,11 @@ type EqualFunc func(v1, v2 interface{}) bool
 type HM struct {
 	slices      []*Pairs
 	capacity    int
+	mask_int    int
+	mask_int32  int32
+	mask_int64  int64
 	mask_uint32 uint32
 	mask_uint64 uint64
-	mask_int    int
 	count       int
 	lock        *sync.RWMutex
 }
@@ -43,6 +45,8 @@ func New(capacity int) *HM {
 		capacity:    capacity,
 		count:       0,
 		mask_int:    capacity - 1,
+		mask_int32:  int32(capacity - 1),
+		mask_int64:  int64(capacity - 1),
 		mask_uint32: uint32(capacity - 1),
 		mask_uint64: uint64(capacity - 1),
 		lock:        &sync.RWMutex{},
@@ -261,6 +265,12 @@ func (hm *HM) GetCount() int {
 	return hm.count
 }
 
+func (hm *HM) GetCapacity() int {
+	hm.lock.RLock()
+	defer hm.lock.RUnlock()
+	return hm.capacity
+}
+
 func (hm *HM) getHashIndexAndEqualFunc(key interface{}) (int, EqualFunc) {
 	switch key.(type) {
 	case []uint8:
@@ -273,6 +283,10 @@ func (hm *HM) getHashIndexAndEqualFunc(key interface{}) (int, EqualFunc) {
 		return int(hash.Sum32() & hm.mask_uint32), stringEqual
 	case int:
 		return key.(int) & hm.mask_int, intEqual
+	case int64:
+		return int(key.(int64) & hm.mask_int64), int64Equal
+	case int32:
+		return int(key.(int32) & hm.mask_int32), int32Equal
 	case uint64:
 		return int(key.(uint64) & hm.mask_uint64), uint64Equal
 	case uint32:
@@ -292,6 +306,14 @@ func stringEqual(v1, v2 interface{}) bool {
 
 func intEqual(v1, v2 interface{}) bool {
 	return v1.(int) == v2.(int)
+}
+
+func int32Equal(v1, v2 interface{}) bool {
+	return v1.(int32) == v2.(int32)
+}
+
+func int64Equal(v1, v2 interface{}) bool {
+	return v1.(int64) == v2.(int64)
 }
 
 func uint32Equal(v1, v2 interface{}) bool {
